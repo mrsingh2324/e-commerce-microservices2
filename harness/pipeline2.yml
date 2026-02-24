@@ -1,0 +1,138 @@
+pipeline:
+  name: Ecommerce CD
+  identifier: ecommerce_cd
+  projectIdentifier: default_project
+  orgIdentifier: default
+  tags: {}
+  stages:
+    - stage:
+        name: Deploy Product Service
+        identifier: deploy_product_service
+        type: Deployment
+        failureStrategies:                          # added
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: product_service
+          environment:
+            environmentRef: gke_production
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: ecommerce_cluster
+          execution:
+            steps:
+              - step:
+                  name: Rolling Deployment
+                  identifier: rolling_deploy_product
+                  type: K8sRollingDeploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+            rollbackSteps:
+              - step:
+                  name: Rollback
+                  identifier: rollback_product
+                  type: K8sRollingRollback
+                  timeout: 10m
+                  spec: {}
+
+    - stage:
+        name: Deploy Order Service
+        identifier: deploy_order_service
+        type: Deployment
+        failureStrategies:                          # added
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: order_service
+          environment:
+            environmentRef: gke_production
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: ecommerce_cluster
+          execution:
+            steps:
+              - step:
+                  name: Rolling Deployment
+                  identifier: rolling_deploy_order
+                  type: K8sRollingDeploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+            rollbackSteps:
+              - step:
+                  name: Rollback
+                  identifier: rollback_order
+                  type: K8sRollingRollback
+                  timeout: 10m
+                  spec: {}
+
+    - stage:
+        name: Approval Gate
+        identifier: approval_gate
+        type: Approval
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: Approve Production Deploy
+                  identifier: approve_prod
+                  type: HarnessApproval
+                  timeout: 1d
+                  spec:
+                    approvalMessage: |
+                      Product and Order services deployed.
+                      Approve to deploy API Gateway.
+                    includePipelineExecutionHistory: true
+                    approvers:
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                      userGroups:
+                        - account._account_all_users
+                    approverInputs: []
+
+    - stage:
+        name: Deploy API Gateway
+        identifier: deploy_api_gateway
+        type: Deployment
+        failureStrategies:                          # added
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: api_gateway
+          environment:
+            environmentRef: gke_production
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: ecommerce_cluster
+          execution:
+            steps:
+              - step:
+                  name: Rolling Deployment
+                  identifier: rolling_deploy_gateway
+                  type: K8sRollingDeploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+            rollbackSteps:
+              - step:
+                  name: Rollback
+                  identifier: rollback_gateway
+                  type: K8sRollingRollback
+                  timeout: 10m
+                  spec: {}
